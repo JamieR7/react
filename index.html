@@ -701,7 +701,8 @@
                 <div class="ready-wrapper" id="simpleReadyWrapper">
                     <div class="ready-overlay" id="simpleReadyOverlay">
                         <div class="ready-text">Read the instructions above, then tap the button below<br>(or press
-                            <kbd>1</kbd>) when you're ready</div>
+                            <kbd>1</kbd>) when you're ready
+                        </div>
                         <button class="ready-start-btn" onclick="beginSimpleTrials()">Start Round 1 ▶</button>
                     </div>
                     <div class="trial-counter" id="simpleTrialCounter">Trial 1 of 5</div>
@@ -728,7 +729,8 @@
                 <div class="ready-wrapper" id="choiceReadyWrapper">
                     <div class="ready-overlay" id="choiceReadyOverlay">
                         <div class="ready-text">Read the instructions above, then tap the button below<br>(or press
-                            <kbd>1</kbd>) when you're ready</div>
+                            <kbd>1</kbd>) when you're ready
+                        </div>
                         <button class="ready-start-btn" onclick="beginChoiceTrials()">Start Round 2 ▶</button>
                     </div>
                     <div class="trial-counter" id="choiceTrialCounter">Trial 1 of 5</div>
@@ -835,6 +837,7 @@
         let choiceTarget = -1;
         let choiceWaiting = false;
         let choiceStimulus = false;
+        let consecutiveWrong = 0; // track consecutive wrong presses
 
         // Track which screen is active for keyboard routing
         let activeScreen = 'welcome'; // 'welcome', 'simple', 'choice', 'results'
@@ -1085,37 +1088,64 @@
             if (!choiceStimulus) return;
 
             if (index !== choiceTarget) {
-                // Wrong button — trial fails with 2000ms penalty
-                const PENALTY_MS = 2000;
-                choiceTimes.push(PENALTY_MS);
-                choiceWaiting = false;
-                choiceStimulus = false;
+                consecutiveWrong++;
 
-                // Disable all buttons immediately
-                document.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = true);
+                if (consecutiveWrong >= 3) {
+                    // 3 wrong in a row — penalty
+                    const PENALTY_MS = 2000;
+                    choiceTimes.push(PENALTY_MS);
+                    choiceWaiting = false;
+                    choiceStimulus = false;
+                    consecutiveWrong = 0;
 
-                const wrongFb = document.getElementById('wrongFeedback');
-                wrongFb.textContent = '✗ Wrong colour! 2000ms penalty added.';
-                wrongFb.classList.remove('hidden');
+                    document.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = true);
 
-                const fb = document.getElementById('choiceFeedback');
-                fb.textContent = `${PENALTY_MS} ms penalty`;
-                fb.className = 'trial-feedback slow';
+                    const wrongFb = document.getElementById('wrongFeedback');
+                    wrongFb.textContent = '✗ 3 wrong in a row — 2000ms penalty!';
+                    wrongFb.classList.remove('hidden');
 
-                // Add penalty pill
-                const history = document.getElementById('choiceHistory');
-                const pill = document.createElement('span');
-                pill.className = 'trial-pill';
-                pill.style.background = '#fde8e8';
-                pill.style.color = '#e73037';
-                pill.textContent = `${PENALTY_MS} ms ✗`;
-                history.appendChild(pill);
+                    const fb = document.getElementById('choiceFeedback');
+                    fb.textContent = `${PENALTY_MS} ms penalty`;
+                    fb.className = 'trial-feedback slow';
 
-                setTimeout(nextChoiceTrial, 1500);
+                    const history = document.getElementById('choiceHistory');
+                    const pill = document.createElement('span');
+                    pill.className = 'trial-pill';
+                    pill.style.background = '#fde8e8';
+                    pill.style.color = '#e73037';
+                    pill.textContent = `${PENALTY_MS} ms ✗`;
+                    history.appendChild(pill);
+
+                    setTimeout(nextChoiceTrial, 1500);
+                } else {
+                    // Wrong but forgivable — restart this trial
+                    clearTimeout(stimulusTimeout);
+                    choiceWaiting = false;
+                    choiceStimulus = false;
+
+                    document.querySelectorAll('.choice-btn').forEach(btn => {
+                        btn.classList.remove('lit');
+                        btn.disabled = true;
+                    });
+
+                    const wrongFb = document.getElementById('wrongFeedback');
+                    wrongFb.textContent = `✗ Wrong colour! Try again (${consecutiveWrong}/3 before penalty)`;
+                    wrongFb.classList.remove('hidden');
+
+                    const fb = document.getElementById('choiceFeedback');
+                    fb.textContent = '⚠️ Restarting trial...';
+                    fb.className = 'trial-feedback ok';
+
+                    setTimeout(() => {
+                        choiceTrialNum--;
+                        nextChoiceTrial();
+                    }, 1200);
+                }
                 return;
             }
 
-            // Correct!
+            // Correct — reset wrong counter
+            consecutiveWrong = 0;
             const rt = Math.round(performance.now() - stimulusTime);
             choiceTimes.push(rt);
             choiceWaiting = false;
@@ -1206,6 +1236,7 @@
             choiceTarget = -1;
             choiceWaiting = false;
             choiceStimulus = false;
+            consecutiveWrong = 0;
             activeScreen = 'welcome';
 
             // Reset UI
